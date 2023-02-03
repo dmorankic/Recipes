@@ -1,11 +1,11 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
-import { ElementRef, Injectable } from '@angular/core';
+import { Injectable } from '@angular/core';
 import { Router } from '@angular/router';
-import { BehaviorSubject, throwError } from 'rxjs';
+import { BehaviorSubject, Observable, throwError } from 'rxjs';
 import { catchError, tap } from 'rxjs/operators';
 import { AuthResponseData, LoginResponseData } from './responses.model';
 import { User } from './user.model';
-
+import { environment } from '../environments/environment';
 @Injectable({
   providedIn: 'root',
 })
@@ -14,31 +14,38 @@ export class AuthService {
   logOutIntervalRef;
   constructor(private http: HttpClient, private router: Router) {}
   signUp(email: string, password: string) {
-    return this.http
-      .post<AuthResponseData>(
-        'https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=AIzaSyDsM2MJ8YGT6Mfu213O8NCtJPQ5WFC5WTw',
+    return this.onAuthResponse(
+      this.http.post<AuthResponseData>(
+        'https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=' +
+          environment.apiKey,
         { email, password, returnSecureToken: true }
       )
-      .pipe(catchError(this.handleError));
+    );
   }
 
   signIn(email: string, password: string) {
-    return this.http
-      .post<LoginResponseData>(
-        'https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=AIzaSyDsM2MJ8YGT6Mfu213O8NCtJPQ5WFC5WTw',
+    return this.onAuthResponse(
+      this.http.post<LoginResponseData>(
+        'https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=' +
+          environment.apiKey,
         { email, password, returnSecureToken: true }
       )
-      .pipe(
-        catchError(this.handleError),
-        tap((response) =>
-          this.handleResponse(
-            response.email,
-            response.idToken,
-            +response.expiresIn,
-            response.localId
-          )
+    );
+  }
+  onAuthResponse(
+    authResponse: Observable<AuthResponseData | LoginResponseData>
+  ) {
+    return authResponse.pipe(
+      catchError(this.handleError),
+      tap((response) =>
+        this.handleResponse(
+          response.email,
+          response.idToken,
+          +response.expiresIn,
+          response.localId
         )
-      );
+      )
+    );
   }
   handleResponse(
     email: string,
@@ -80,7 +87,6 @@ export class AuthService {
         errorMes = 'Too many login attempts, try later';
         break;
       }
-      
     }
     return throwError(errorMes);
   }
@@ -98,7 +104,7 @@ export class AuthService {
     if (!userData) {
       return this.user.next(null);
     }
-   
+
     let tokenExpirationDate = new Date(userData._tokenExpirationDate);
     let user = new User(
       userData.email,
@@ -110,7 +116,6 @@ export class AuthService {
     this.user.next(user);
     let sessionDuration = tokenExpirationDate.getTime() - new Date().getTime();
     this.autoLogOut(sessionDuration);
-    
   }
   autoLogOut(sessionDuration: number) {
     this.logOutIntervalRef = this.logOutIntervalRef = setTimeout(() => {
